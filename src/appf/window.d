@@ -177,7 +177,7 @@ enum AtomT {
   WM_PROTOCOLS,
   WM_DELETE_WINDOW,
     //WM_TAKE_FOCUS,
-  NET_WM_PING,
+  _NET_WM_PING,
 }
 
 struct MessageLoop {
@@ -231,8 +231,11 @@ struct MessageLoop {
         if (e.xclient.data.l[0] == this.atoms[AtomT.WM_DELETE_WINDOW]) {
           this.removeWindow(this.windows.get(e.xclient.window, null));
           return this.windows.length > 0;
-        } else if (e.xclient.data.l[0] == this.atoms[AtomT.NET_WM_PING]) {
-          // TODO: xlib.XSendMessage(rootwindow ...)
+        } else if (e.xclient.data.l[0] == this.atoms[AtomT._NET_WM_PING]) {
+          assert(this.conf.dpy == e.xclient.display);
+          e.xclient.window = xlib.XRootWindow(this.conf.dpy, this.conf.scr);
+          xlib.XSendEvent(e.xclient.display, e.xclient.window, xlib.Bool.False,
+            xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &e);
         }
       }
       break;
