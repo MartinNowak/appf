@@ -228,9 +228,10 @@ struct MessageLoop {
     switch (e.type) {
     case xlib.ClientMessage:
       if (e.xclient.message_type == this.atoms[AtomT.WM_PROTOCOLS]) {
-        if (e.xclient.data.l[0] == this.atoms[AtomT.WM_DELETE_WINDOW])
-          return false;
-        else if (e.xclient.data.l[0] == this.atoms[AtomT.NET_WM_PING]) {
+        if (e.xclient.data.l[0] == this.atoms[AtomT.WM_DELETE_WINDOW]) {
+          this.removeWindow(this.windows.get(e.xclient.window, null));
+          return this.windows.length > 0;
+        } else if (e.xclient.data.l[0] == this.atoms[AtomT.NET_WM_PING]) {
           // TODO: xlib.XSendMessage(rootwindow ...)
         }
       }
