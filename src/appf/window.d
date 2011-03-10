@@ -79,6 +79,7 @@ class Window {
    *     size = the new window size
    */
   ref Window resize(Size size) {
+    xlib.XResizeWindow(this.conf.dpy, this.hwnd, size.w, size.h);
     return this;
   }
 
@@ -88,6 +89,17 @@ class Window {
    *     pos = the new position of the top left corner
    */
   ref Window move(Pos pos) {
+    xlib.XMoveWindow(this.conf.dpy, this.hwnd, pos.x, pos.y);
+    return this;
+  }
+
+  /**
+   * Moves and resizes the window.
+   * Parameters:
+   *     rect = the new position and size of the window
+   */
+  ref Window moveResize(Rect rect) {
+    xlib.XMoveResizeWindow(this.conf.dpy, this.hwnd, rect.pos.x, rect.pos.y, rect.size.w, rect.size.h);
     return this;
   }
 

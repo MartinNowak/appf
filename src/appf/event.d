@@ -28,8 +28,12 @@ struct Size {
 
 struct Rect {
   this(int x, int y, uint w, uint h) {
-    this.pos = Pos(x, y);
-    this.size = Size(w, h);
+    this(Pos(x, y), Size(w, h));
+  }
+
+  this(Pos pos, Size size) {
+    this.pos = pos;
+    this.size = size;
   }
 
   @property bool empty() const {
