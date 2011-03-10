@@ -1,14 +1,23 @@
 module appf.window;
 
 public import appf.event;
-import std.conv, std.exception;
+import std.conv, std.exception, std.string, std.typecons;
 
+/**
+ * Interface to manage window events
+ */
 interface WindowHandler {
-  void onEvent(MouseEvent e);
-  void onEvent(KeyEvent e);
-  void onEvent(RedrawEvent e, Window win);
-  void onClose();
+  void onEvent(Window win, MouseEvent e);
+  void onEvent(Window win, KeyEvent e);
+  void onEvent(Window win, RedrawEvent e);
+  void onClose(Window win);
 }
+
+/**
+ * Empty implementation of WindowHandler can be used to only override
+ * some functions.
+ */
+alias BlackHole!WindowHandler EmptyHandler;
 
 version (Posix) {
   version = xlib;
@@ -23,7 +32,7 @@ version (xlib) {
  */
 class Window {
   alias xlib.Window PlatformHandle;
-  WindowHandler handler;
+  WindowHandler _handler;
   WindowConf conf;
   PlatformHandle hwnd;
 
@@ -31,6 +40,21 @@ class Window {
     this.handler = handler;
     this.conf = conf;
     this.hwnd = createWindow(rect);
+  }
+
+  /**
+   * Returns the installed WindowHandler.
+   */
+  @property WindowHandler handler() {
+    return this._handler;
+  }
+
+  /**
+   * Sets a new WindowHandler.
+   */
+  @property ref Window handler(WindowHandler handler) {
+    this._handler = handler;
+    return this;
   }
 
   /**
@@ -52,7 +76,7 @@ class Window {
    *     title = the new window title
    */
   @property ref Window name(string title) {
-    xlib.XStoreName(this.conf.dpy, this.hwnd, "MyWindow");
+    xlib.XStoreName(this.conf.dpy, this.hwnd, toStringz(title));
     return this;
   }
 
@@ -212,10 +236,28 @@ struct MessageLoop {
       }
       break;
 
+    case xlib.Expose:
+      if (e.xexpose.count < 1) {
+        auto area = Rect(e.xexpose.x, e.xexpose.y, e.xexpose.width, e.xexpose.height);
+        this.sendEvent(e.xexpose.window, RedrawEvent(area));
+      }
+      break;
+
+
+    case xlib.MotionNotify:
+      auto pos = Pos(e.xmotion.x, e.xmotion.y);
+      this.sendEvent(e.xmotion.window, MouseEvent(pos));
+      break;
 
     default:
     }
     return true;
+  }
+
+  void sendEvent(EventT)(Window.PlatformHandle hwnd, EventT event) {
+    auto win = hwnd in this.windows;
+    if (win !is null && win.handler !is null)
+      win.handler.onEvent(*win, event);
   }
 
   void initWindow(Window win) {

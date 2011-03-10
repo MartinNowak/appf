@@ -1,6 +1,6 @@
 module appf.event;
 
-import std.bitmanip;
+import std.bitmanip, std.conv;
 
 struct MouseEvent {
   Pos pos;
@@ -19,10 +19,16 @@ struct RedrawEvent {
 }
 
 struct Pos {
+  @property string toString() const {
+    return "Pos x:" ~ to!string(x) ~ " y:" ~ to!string(y);
+  }
   int x, y;
 }
 
 struct Size {
+  @property string toString() const {
+    return "Size w:" ~ to!string(w) ~ " h:" ~ to!string(h);
+  }
   int w, h;
 }
 
@@ -34,6 +40,10 @@ struct Rect {
   this(Pos pos, Size size) {
     this.pos = pos;
     this.size = size;
+  }
+
+  @property string toString() const {
+    return "Rect pos:" ~ to!string(pos) ~ " size:" ~ to!string(size);
   }
 
   @property bool empty() const {
