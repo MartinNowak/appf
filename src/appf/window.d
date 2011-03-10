@@ -244,6 +244,11 @@ struct MessageLoop {
       }
       break;
 
+    case xlib.ButtonPress:
+    case xlib.ButtonRelease:
+      auto pos = Pos(e.xbutton.x, e.xbutton.y);
+      this.sendEvent(e.xbutton.window, MouseEvent(pos));
+      break;
 
     case xlib.MotionNotify:
       auto pos = Pos(e.xmotion.x, e.xmotion.y);
