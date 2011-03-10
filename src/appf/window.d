@@ -7,7 +7,7 @@ import std.conv, std.exception, std.string, std.typecons;
  * Interface to manage window events
  */
 interface WindowHandler {
-  void onEvent(Window win, MouseEvent e);
+  bool onEvent(Window win, MouseEvent e);
   void onEvent(Window win, KeyEvent e);
   void onEvent(Window win, RedrawEvent e);
   void onClose(Window win);
@@ -35,11 +35,33 @@ class Window {
   WindowHandler _handler;
   WindowConf conf;
   PlatformHandle hwnd;
+  Window[PlatformHandle] subwins;
 
-  this(WindowHandler handler, Rect rect, WindowConf conf) {
+  this(WindowConf conf, WindowHandler handler, Rect rect) {
+    this(conf, handler);
+    this.hwnd = createWindow(null, rect);
+  }
+
+  private this(WindowConf conf, WindowHandler handler) {
     this.handler = handler;
     this.conf = conf;
-    this.hwnd = createWindow(rect);
+  }
+
+  /**
+   * Creates a new sub window of this window. The window is invisible
+   * until it's show() method was called.
+   * Parameters:
+   *     rect = the initial position and size of the window in parent coordinates
+   *     handler = instance of WindowHandler to handle Input/Redraw requests
+   * Returns:
+   *     the newly created window
+   */
+  Window makeSubWindow(Rect rect=Rect(0, 0, 400, 300), WindowHandler handler=null) {
+    enforce(!rect.empty);
+    auto sub = new Window(this.conf, handler);
+    sub.hwnd = createWindow(this, rect);
+    this.subwins[sub.hwnd] = sub;
+    return sub;
   }
 
   /**
@@ -137,12 +159,12 @@ class Window {
 
 private:
 
-  xlib.Window createWindow(Rect r) {
+  xlib.Window createWindow(Window parent, Rect r) {
     auto dpy = this.conf.dpy;
     auto scr = this.conf.scr;
 
-    auto rootwin = xlib.XRootWindow(dpy, scr);
-    enum border = 0;
+    auto rootwin = parent is null ? xlib.XRootWindow(dpy, scr) : parent.platformHandle;
+    enum border = 2;
     return xlib.XCreateSimpleWindow(dpy, rootwin, r.pos.x, r.pos.y,
       r.size.w, r.size.h, border,
       xlib.XBlackPixel(dpy, scr), xlib.XWhitePixel(dpy, scr));
@@ -243,19 +265,20 @@ struct MessageLoop {
     case xlib.Expose:
       if (e.xexpose.count < 1) {
         auto area = Rect(e.xexpose.x, e.xexpose.y, e.xexpose.width, e.xexpose.height);
-        this.sendEvent(e.xexpose.window, RedrawEvent(area));
+        auto win = this.windows[e.xexpose.window];
+        this.sendEvent(win, RedrawEvent(area));
       }
       break;
 
     case xlib.ButtonPress:
     case xlib.ButtonRelease:
-      auto pos = Pos(e.xbutton.x, e.xbutton.y);
-      this.sendEvent(e.xbutton.window, MouseEvent(pos));
+      auto win = this.windows[e.xbutton.window];
+      this.recurseMouseEvent(win, e.xbutton);
       break;
 
     case xlib.MotionNotify:
-      auto pos = Pos(e.xmotion.x, e.xmotion.y);
-      this.sendEvent(e.xmotion.window, MouseEvent(pos));
+      auto win = this.windows[e.xmotion.window];
+      this.recurseMouseEvent(win, e.xmotion);
       break;
 
     default:
@@ -263,10 +286,25 @@ struct MessageLoop {
     return true;
   }
 
-  void sendEvent(EventT)(Window.PlatformHandle hwnd, EventT event) {
-    auto win = hwnd in this.windows;
-    if (win !is null && win.handler !is null)
-      win.handler.onEvent(*win, event);
+  void recurseMouseEvent(XEventT)(Window win, XEventT xe) {
+    while(this.sendEvent(win, MouseEvent(Pos(xe.x, xe.y))) && xe.subwindow) {
+      win = win.subwins[xe.subwindow];
+      xe.window = xe.subwindow;
+      xlib.XQueryPointer(this.conf.dpy, xe.window, &xe.root, &xe.subwindow,
+        &xe.x_root, &xe.y_root, &xe.x, &xe.y, &xe.state);
+    }
+  }
+
+  bool sendEvent(EventT)(Window win, EventT event)
+  if(is(typeof(win.handler.onEvent(win, event)) : bool))
+  {
+    return win.handler !is null ? win.handler.onEvent(win, event) : true;
+  }
+
+  void sendEvent(EventT)(Window win, EventT event)
+  if(!is(typeof(win.handler.onEvent(win, event)) : bool))
+  {
+    if (win.handler !is null) win.handler.onEvent(win, event);
   }
 
   void initWindow(Window win) {
