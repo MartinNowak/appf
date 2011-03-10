@@ -50,6 +50,11 @@ struct Rect {
     return this.size.w * this.size.h == 0;
   }
 
+  bool hitTest(in Pos pos) const {
+    return pos.x >= this.pos.x && pos.x - this.pos.x < this.size.w
+      && pos.y >= this.pos.y && pos.y - this.pos.y < this.size.h;
+  }
+
   Pos pos;
   Size size;
 }
