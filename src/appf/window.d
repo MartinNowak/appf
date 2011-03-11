@@ -32,7 +32,6 @@ class Window {
   WindowHandler _handler;
   WindowConf conf;
   PlatformHandle hwnd;
-  Window[PlatformHandle] subwins;
 
   this(WindowConf conf, WindowHandler handler, Rect rect) {
     this(conf, handler);
@@ -46,18 +45,17 @@ class Window {
 
   /**
    * Creates a new sub window of this window. The window is invisible
-   * until it's show() method was called.
+   * until it's show() method was called. No events are dispatched to
+   * subwindows.
    * Parameters:
    *     rect = the initial position and size of the window in parent coordinates
-   *     handler = instance of WindowHandler to handle Input/Redraw requests
    * Returns:
    *     the newly created window
    */
-  Window makeSubWindow(Rect rect=Rect(0, 0, 400, 300), WindowHandler handler=null) {
+  Window makeSubWindow(Rect rect=Rect(0, 0, 400, 300)) {
     enforce(!rect.empty);
-    auto sub = new Window(this.conf, handler);
+    auto sub = new Window(this.conf, null);
     sub.hwnd = createWindow(this, rect);
-    this.subwins[sub.hwnd] = sub;
     return sub;
   }
 
