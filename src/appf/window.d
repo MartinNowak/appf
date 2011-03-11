@@ -7,10 +7,7 @@ import std.conv, std.exception, std.string, std.typecons;
  * Interface to manage window events
  */
 interface WindowHandler {
-  bool onEvent(Window win, MouseEvent e);
-  void onEvent(Window win, KeyEvent e);
-  void onEvent(Window win, RedrawEvent e);
-  void onClose(Window win);
+  void onEvent(Event e, Window win);
 }
 
 /**
@@ -275,46 +272,45 @@ struct MessageLoop {
     case xlib.Expose:
       if (e.xexpose.count < 1) {
         auto area = Rect(e.xexpose.x, e.xexpose.y, e.xexpose.width, e.xexpose.height);
-        auto win = this.windows[e.xexpose.window];
-        this.sendEvent(win, RedrawEvent(area));
+        this.sendEvent(e.xexpose.window, Event(RedrawEvent(area)));
       }
       break;
 
     case xlib.ButtonPress:
     case xlib.ButtonRelease:
-      auto win = this.windows[e.xbutton.window];
-      this.recurseMouseEvent(win, e.xbutton);
+      this.sendEvent(e.xbutton.window, Event(mouseEvent(e.xbutton)));
       break;
 
     case xlib.MotionNotify:
-      auto win = this.windows[e.xmotion.window];
-      this.recurseMouseEvent(win, e.xmotion);
+      this.sendEvent(e.xbutton.window, Event(mouseEvent(e.xbutton)));
+      this.sendEvent(e.xmotion.window, Event(mouseEvent(e.xbutton)));
       break;
+
+    case xlib.MapNotify:
+      std.stdio.writeln("map notify");
+      break;
+
+    case xlib.ConfigureNotify:
+      auto area = Rect(e.xconfigure.x, e.xconfigure.y, e.xconfigure.width, e.xconfigure.height);
+      this.sendEvent(e.xconfigure.window, Event(ResizeEvent(area)));
 
     default:
     }
     return true;
   }
 
-  void recurseMouseEvent(XEventT)(Window win, XEventT xe) {
-    while(this.sendEvent(win, MouseEvent(Pos(xe.x, xe.y))) && xe.subwindow) {
-      win = win.subwins[xe.subwindow];
-      xe.window = xe.subwindow;
-      xlib.XQueryPointer(this.conf.dpy, xe.window, &xe.root, &xe.subwindow,
-        &xe.x_root, &xe.y_root, &xe.x, &xe.y, &xe.state);
-    }
+  static MouseEvent mouseEvent(XEvent)(XEvent xe) {
+    auto pos = Pos(xe.x, xe.y);
+    auto btn = buttonState(xe.state);
+    auto mod = modState(xe.state);
+    return MouseEvent(pos, btn, mod);
   }
 
-  bool sendEvent(EventT)(Window win, EventT event)
-  if(is(typeof(win.handler.onEvent(win, event)) : bool))
+  void sendEvent(Window.PlatformHandle hwnd, Event event)
   {
-    return win.handler !is null ? win.handler.onEvent(win, event) : true;
-  }
-
-  void sendEvent(EventT)(Window win, EventT event)
-  if(!is(typeof(win.handler.onEvent(win, event)) : bool))
-  {
-    if (win.handler !is null) win.handler.onEvent(win, event);
+    auto win = hwnd in this.windows;
+    if (win !is null && win.handler !is null)
+      win.handler.onEvent(event, *win);
   }
 
   void initWindow(Window win) {
