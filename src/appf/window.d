@@ -119,6 +119,16 @@ class Window {
   }
 
   /**
+   * Returns:
+   *     the current area of this window in parent coordinates
+   */
+  @property Rect area() {
+    xlib.XWindowAttributes attr;
+    xlib.XGetWindowAttributes(this.conf.dpy, this.hwnd, &attr);
+    return Rect(attr.x, attr.y, attr.width, attr.height);
+  }
+
+  /**
    * Resizes the window while leaving the top left corner at it's
    * current position.
    * Parameters:
