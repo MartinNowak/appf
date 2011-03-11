@@ -1,6 +1,6 @@
 module appf.event;
 
-import std.bitmanip, std.conv, std.typetuple, std.variant;
+import std.algorithm, std.bitmanip, std.conv, std.typetuple, std.variant;
 
 version (Posix) {
   version = xlib;
@@ -74,12 +74,21 @@ struct Rect {
   }
 
   @property bool empty() const {
-    return this.size.w * this.size.h == 0;
+    return this.size.w <= 0 || this.size.h <= 0;
   }
 
   bool hitTest(in Pos pos) const {
     return pos.x >= this.pos.x && pos.x - this.pos.x < this.size.w
       && pos.y >= this.pos.y && pos.y - this.pos.y < this.size.h;
+  }
+
+  Rect intersection(in Rect rect) {
+    Rect res;
+    res.pos.x = max(this.pos.x, rect.pos.x);
+    res.pos.y = max(this.pos.y, rect.pos.y);
+    res.size.w = min(this.pos.x + this.size.w, rect.pos.x + rect.size.w) - res.pos.x;
+    res.size.h = min(this.pos.y + this.size.h, rect.pos.y + rect.size.h) - res.pos.y;
+    return res.empty ? Rect.init : res;
   }
 
   Pos pos;
