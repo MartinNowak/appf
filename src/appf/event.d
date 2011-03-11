@@ -69,15 +69,35 @@ struct Button {
 
 struct Mod {
   mixin(bitfields!(
-          bool, "alt", 1,
-          bool, "ctrl", 1,
           bool, "shift", 1,
-          uint, "", 5));
+          bool, "ctrl", 1,
+          bool, "alt", 1,
+          bool, "numlock", 1,
+          uint, "", 4));
 }
 
 struct Key {
   uint num;
   @property dchar character() const {
     return cast(dchar)this.num;
+  }
+}
+
+version (xlib) {
+  Button buttonState(uint state) {
+    Button btn;
+    btn.left = (state & xlib.Button1Mask) != 0;
+    btn.middle = (state & xlib.Button2Mask) != 0;
+    btn.right = (state & xlib.Button3Mask) != 0;
+    return btn;
+  }
+
+  Mod modState(uint state) {
+    Mod mod;
+    mod.shift = (state & xlib.ShiftMask) != 0;
+    mod.ctrl = (state & xlib.ControlMask) != 0;
+    mod.alt = (state & xlib.Mod1Mask) != 0;
+    mod.numlock = (state & xlib.Mod2Mask) != 0;
+    return mod;
   }
 }
