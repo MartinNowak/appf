@@ -1,6 +1,29 @@
 module appf.event;
 
-import std.bitmanip, std.conv;
+import std.bitmanip, std.conv, std.typetuple, std.variant;
+
+version (Posix) {
+  version = xlib;
+  import xlib = xlib.xlib;
+} else {
+  static assert(0);
+}
+
+alias TypeTuple!(StateEvent, MouseEvent, KeyEvent, RedrawEvent, ResizeEvent) EventTypes;
+alias Algebraic!(EventTypes) Event;
+
+void visitEvent(Visitor, Args...)(Event e, Visitor visitor, Args args) {
+  foreach(T; EventTypes) {
+    static if(is(typeof(visitor.visit(e.get!(T), args)))) {
+      if (e.type == typeid(T))
+        visitor.visit(e.get!(T), args);
+    }
+  }
+}
+
+struct StateEvent {
+  bool visible;
+}
 
 struct MouseEvent {
   Pos pos;
@@ -15,6 +38,10 @@ struct KeyEvent {
 }
 
 struct RedrawEvent {
+  Rect area;
+}
+
+struct ResizeEvent {
   Rect area;
 }
 
