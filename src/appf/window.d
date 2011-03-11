@@ -102,6 +102,8 @@ class Window {
    */
   ref Window show() {
     xlib.XMapWindow(this.conf.dpy, this.hwnd);
+    if (this.handler !is null)
+      this.handler.onEvent(Event(StateEvent(true)), this);
     return this;
   }
 
@@ -109,6 +111,8 @@ class Window {
    * Makes the window invisible
    */
   ref Window hide() {
+    if (this.handler !is null)
+      this.handler.onEvent(Event(StateEvent(false)), this);
     xlib.XUnmapWindow(this.conf.dpy, this.hwnd);
     return this;
   }
