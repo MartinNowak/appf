@@ -44,7 +44,7 @@ class AppF {
    * Returns:
    *     the newly created window
    */
-  Window makeWindow(Rect rect=Rect(0, 0, 400, 300), WindowHandler handler=null) {
+  Window makeWindow(IRect rect=IRect(400, 300), WindowHandler handler=null) {
     enforce(!rect.empty);
     auto win = new Window(this.winconf, handler, rect);
     this.msgLoop.addWindow(win);

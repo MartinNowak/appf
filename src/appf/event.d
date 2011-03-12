@@ -1,6 +1,7 @@
 module appf.event;
 
 import std.algorithm, std.bitmanip, std.conv, std.typetuple, std.variant;
+public import guip.point, guip.rect, guip.size;
 
 version (Posix) {
   version = xlib;
@@ -26,73 +27,23 @@ struct StateEvent {
 }
 
 struct MouseEvent {
-  Pos pos;
+  IPoint pos;
   Button button;
   Mod mod;
 }
 
 struct KeyEvent {
-  Pos pos;
+  IPoint pos;
   Key key;
   Mod mod;
 }
 
 struct RedrawEvent {
-  Rect area;
+  IRect area;
 }
 
 struct ResizeEvent {
-  Rect area;
-}
-
-struct Pos {
-  @property string toString() const {
-    return "Pos x:" ~ to!string(x) ~ " y:" ~ to!string(y);
-  }
-  int x, y;
-}
-
-struct Size {
-  @property string toString() const {
-    return "Size w:" ~ to!string(w) ~ " h:" ~ to!string(h);
-  }
-  int w, h;
-}
-
-struct Rect {
-  this(int x, int y, uint w, uint h) {
-    this(Pos(x, y), Size(w, h));
-  }
-
-  this(Pos pos, Size size) {
-    this.pos = pos;
-    this.size = size;
-  }
-
-  @property string toString() const {
-    return "Rect pos:" ~ to!string(pos) ~ " size:" ~ to!string(size);
-  }
-
-  @property bool empty() const {
-    return this.size.w <= 0 || this.size.h <= 0;
-  }
-
-  bool hitTest(in Pos pos) const {
-    return pos.x >= this.pos.x && pos.x - this.pos.x < this.size.w
-      && pos.y >= this.pos.y && pos.y - this.pos.y < this.size.h;
-  }
-
-  Rect intersection(in Rect rect) {
-    Rect res;
-    res.pos.x = max(this.pos.x, rect.pos.x);
-    res.pos.y = max(this.pos.y, rect.pos.y);
-    res.size.w = min(this.pos.x + this.size.w, rect.pos.x + rect.size.w) - res.pos.x;
-    res.size.h = min(this.pos.y + this.size.h, rect.pos.y + rect.size.h) - res.pos.y;
-    return res.empty ? Rect.init : res;
-  }
-
-  Pos pos;
-  Size size;
+  IRect area;
 }
 
 struct Button {

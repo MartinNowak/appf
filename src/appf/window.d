@@ -33,7 +33,7 @@ class Window {
   WindowConf conf;
   PlatformHandle hwnd;
 
-  this(WindowConf conf, WindowHandler handler, Rect rect) {
+  this(WindowConf conf, WindowHandler handler, IRect rect) {
     this(conf, handler);
     this.hwnd = createWindow(null, rect);
   }
@@ -52,7 +52,7 @@ class Window {
    * Returns:
    *     the newly created window
    */
-  Window makeSubWindow(Rect rect=Rect(0, 0, 400, 300)) {
+  Window makeSubWindow(IRect rect=IRect(400, 300)) {
     enforce(!rect.empty);
     auto sub = new Window(this.conf, null);
     sub.hwnd = createWindow(this, rect);
@@ -121,10 +121,10 @@ class Window {
    * Returns:
    *     the current area of this window in parent coordinates
    */
-  @property Rect area() {
+  @property IRect area() {
     xlib.XWindowAttributes attr;
     xlib.XGetWindowAttributes(this.conf.dpy, this.hwnd, &attr);
-    return Rect(attr.x, attr.y, attr.width, attr.height);
+    return IRect().setXYWH(attr.x, attr.y, attr.width, attr.height);
   }
 
   /**
@@ -133,8 +133,8 @@ class Window {
    * Parameters:
    *     size = the new window size
    */
-  ref Window resize(Size size) {
-    xlib.XResizeWindow(this.conf.dpy, this.hwnd, size.w, size.h);
+  ref Window resize(ISize size) {
+    xlib.XResizeWindow(this.conf.dpy, this.hwnd, size.width, size.height);
     return this;
   }
 
@@ -143,7 +143,7 @@ class Window {
    * Parameters:
    *     pos = the new position of the top left corner
    */
-  ref Window move(Pos pos) {
+  ref Window move(IPoint pos) {
     xlib.XMoveWindow(this.conf.dpy, this.hwnd, pos.x, pos.y);
     return this;
   }
@@ -153,8 +153,9 @@ class Window {
    * Parameters:
    *     rect = the new position and size of the window
    */
-  ref Window moveResize(Rect rect) {
-    xlib.XMoveResizeWindow(this.conf.dpy, this.hwnd, rect.pos.x, rect.pos.y, rect.size.w, rect.size.h);
+  ref Window moveResize(IRect rect) {
+    xlib.XMoveResizeWindow(this.conf.dpy, this.hwnd,
+      rect.left, rect.top, rect.width, rect.height);
     return this;
   }
 
@@ -168,14 +169,14 @@ class Window {
 
 private:
 
-  xlib.Window createWindow(Window parent, Rect r) {
+  xlib.Window createWindow(Window parent, IRect r) {
     auto dpy = this.conf.dpy;
     auto scr = this.conf.scr;
 
     auto rootwin = parent is null ? xlib.XRootWindow(dpy, scr) : parent.platformHandle;
     enum border = 2;
-    return xlib.XCreateSimpleWindow(dpy, rootwin, r.pos.x, r.pos.y,
-      r.size.w, r.size.h, border,
+    return xlib.XCreateSimpleWindow(dpy, rootwin, r.left, r.top,
+      r.width, r.height, border,
       xlib.XBlackPixel(dpy, scr), xlib.XWhitePixel(dpy, scr));
   }
 }
@@ -273,7 +274,8 @@ struct MessageLoop {
 
     case xlib.Expose:
       if (e.xexpose.count < 1) {
-        auto area = Rect(e.xexpose.x, e.xexpose.y, e.xexpose.width, e.xexpose.height);
+        auto area = IRect().setXYWH(
+          e.xexpose.x, e.xexpose.y, e.xexpose.width, e.xexpose.height);
         this.sendEvent(e.xexpose.window, Event(RedrawEvent(area)));
       }
       break;
@@ -293,7 +295,8 @@ struct MessageLoop {
       break;
 
     case xlib.ConfigureNotify:
-      auto area = Rect(e.xconfigure.x, e.xconfigure.y, e.xconfigure.width, e.xconfigure.height);
+      auto area = IRect().setXYWH(
+        e.xconfigure.x, e.xconfigure.y, e.xconfigure.width, e.xconfigure.height);
       this.sendEvent(e.xconfigure.window, Event(ResizeEvent(area)));
 
     default:
@@ -302,7 +305,7 @@ struct MessageLoop {
   }
 
   static MouseEvent mouseEvent(XEvent)(XEvent xe) {
-    auto pos = Pos(xe.x, xe.y);
+    auto pos = IPoint(xe.x, xe.y);
     auto btn = buttonState(xe.state);
     auto mod = modState(xe.state);
     return MouseEvent(pos, btn, mod);

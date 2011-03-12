@@ -15,10 +15,10 @@ class MyHandler : EmptyHandler {
 int main() {
   auto app = new AppF();
   auto handler = new MyHandler;
-  auto win1 = app.makeWindow(Rect(40, 40, 200, 200), handler);
+  auto win1 = app.makeWindow(IRect(IPoint(40, 40), ISize(200, 200)), handler);
   win1.name("Window1");
   win1.show();
   auto win2 = app.makeWindow().handler(handler).name("Window2")
-    .show().moveResize(Rect(Pos(240, 40), Size(200, 200)));
+    .show().moveResize(IRect(IPoint(240, 40), ISize(200, 200)));
   return app.loop();
 }
