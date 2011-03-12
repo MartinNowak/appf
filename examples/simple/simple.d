@@ -12,8 +12,8 @@ class MyHandler : EmptyHandler {
   }
 }
 
-int main(string[] args) {
-  auto app = new AppF(args);
+int main() {
+  auto app = new AppF();
   auto handler = new MyHandler;
   auto win1 = app.makeWindow(Rect(40, 40, 200, 200), handler);
   win1.name("Window1");

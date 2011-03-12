@@ -11,7 +11,7 @@ class AppF {
    * Parameters:
    *     args = arguments to dmain
    */
-  this(ref string[] args=null) {
+  this() {
     this.winconf.init();
     this.msgLoop = MessageLoop(this.winconf);
   }
