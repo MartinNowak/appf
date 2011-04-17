@@ -1,7 +1,7 @@
 module appf.event;
 
 import std.algorithm;
-public import guip.event, guip.point, guip.rect, guip.size;
+import guip.event, guip.point, guip.rect, guip.size;
 
 version (Posix) {
   version = xlib;
@@ -25,6 +25,10 @@ version (xlib) {
     btn.middle = (state & xlib.Button2Mask) != 0;
     btn.right = (state & xlib.Button3Mask) != 0;
     return btn;
+  }
+
+  Key keyDetail(uint keycode) {
+    return Key(keycode);
   }
 
   Mod modState(uint state) {

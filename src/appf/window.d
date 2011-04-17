@@ -2,7 +2,7 @@ module appf.window;
 
 import appf.event;
 import std.conv, std.exception, std.string;
-import guip.bitmap;
+import guip._;
 
 /**
  * Interface to manage window events
@@ -337,6 +337,14 @@ struct MessageLoop {
       this.sendEvent(e.xbutton.window, Event(buttonEvent(e.xbutton, false)));
       break;
 
+    case xlib.KeyPress:
+      this.sendEvent(e.xkey.window, Event(keyEvent(e.xkey, true)));
+      break;
+
+    case xlib.KeyRelease:
+      this.sendEvent(e.xkey.window, Event(keyEvent(e.xkey, false)));
+      break;
+
     case xlib.MotionNotify:
       this.sendEvent(e.xmotion.window, Event(mouseEvent(e.xmotion)));
       break;
@@ -360,6 +368,13 @@ struct MessageLoop {
     auto btn = buttonDetail(xe.button);
     auto mod = modState(xe.state);
     return ButtonEvent(pos, isdown, btn, mod);
+  }
+
+  static KeyEvent keyEvent(xlib.XKeyEvent xe, bool isdown) {
+    auto pos = IPoint(xe.x, xe.y);
+    auto key = keyDetail(xe.keycode);
+    auto mod = modState(xe.state);
+    return KeyEvent(pos, isdown, key, mod);
   }
 
   static MouseEvent mouseEvent(xlib.XMotionEvent xe) {
