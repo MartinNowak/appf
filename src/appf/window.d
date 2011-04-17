@@ -1,7 +1,8 @@
 module appf.window;
 
-public import appf.event;
-import std.conv, std.exception, std.string, std.typecons;
+import appf.event;
+import std.conv, std.exception, std.string;
+import guip.bitmap;
 
 /**
  * Interface to manage window events
@@ -10,18 +11,18 @@ interface WindowHandler {
   void onEvent(Event e, Window win);
 }
 
-/**
- * Empty implementation of WindowHandler can be used to only override
- * some functions.
- */
-alias BlackHole!WindowHandler EmptyHandler;
-
 version (Posix) {
   version = xlib;
   import xlib = xlib.xlib;
+  import xutil = xlib.xutil;
 } else {
   static assert(0);
 }
+
+/**
+ * Policy specifying empty event queue behviour
+ */
+enum OnEmpty { Block, Return }
 
 version (xlib) {
 /**
@@ -32,15 +33,22 @@ class Window {
   WindowHandler _handler;
   WindowConf conf;
   PlatformHandle hwnd;
+  xlib.GC gc;
 
   this(WindowConf conf, WindowHandler handler, IRect rect) {
     this(conf, handler);
     this.hwnd = createWindow(null, rect);
+    this.gc = xlib.XCreateGC(this.conf.dpy, this.hwnd, 0, null);
   }
 
   private this(WindowConf conf, WindowHandler handler) {
     this.handler = handler;
     this.conf = conf;
+  }
+
+  ~this() {
+    xlib.XFreeGC(this.conf.dpy, this.gc);
+    xlib.XDestroyWindow(this.conf.dpy, this.hwnd);
   }
 
   /**
@@ -56,6 +64,7 @@ class Window {
     enforce(!rect.empty);
     auto sub = new Window(this.conf, null);
     sub.hwnd = createWindow(this, rect);
+    sub.gc = xlib.XCreateGC(sub.conf.dpy, sub.hwnd, 0, null);
     return sub;
   }
 
@@ -167,6 +176,42 @@ class Window {
     return this.hwnd;
   }
 
+  /**
+   * Blits a region from the bitmap onto the window
+   * Parameters:
+   *    src = the bitmap to take bits from
+   *    srcPos = the position in the bitmap to take bits from
+   *    dstPos = the posistion in the window to blit to
+   *    size = the width and height to blit
+   */
+  void blitToWindow(in Bitmap bitmap, in IPoint srcPos, in IPoint dstPos, in ISize size) {
+    auto dpy = this.conf.dpy;
+    auto scr = this.conf.scr;
+
+    auto visual = xlib.XDefaultVisual(dpy, scr);
+    auto depth = xlib.XDefaultDepth(dpy, scr);
+    auto xi = xlib.XCreateImage(dpy, visual, 24, xlib.ZPixmap,
+                                0, (cast(Bitmap)bitmap).getBuffer!byte().ptr,
+                                bitmap.width, bitmap.height, 8, 0);
+    assert(srcPos.x + size.width <= xi.width, to!string(srcPos) ~ "sz:" ~ to!string(size));
+    assert(srcPos.y + size.height <= xi.height);
+    xlib.XPutImage(dpy, this.hwnd, this.gc, xi, srcPos.x, srcPos.y, dstPos.x, dstPos.y,
+                   size.width, size.height);
+    xi.data = null; //! data is owned by bitmap buffer
+    xutil.XDestroyImage(xi);
+  }
+
+  /**
+   * Posts an event to this window's event loop
+   * Parameters:
+   *     e = the event to post
+   */
+  void sendEvent(Event e) {
+    auto xe = toPlatformEvent(e, this.conf.dpy, this.hwnd);
+    xlib.XSendEvent(this.conf.dpy, this.hwnd, xlib.Bool.True,
+      xemask(xe.type), &xe);
+  }
+
 private:
 
   xlib.Window createWindow(Window parent, IRect r) {
@@ -250,11 +295,15 @@ struct MessageLoop {
     return p is null ? false : enforce(p == win);
   }
 
-  bool dispatchMessage() {
+  bool dispatchMessage(OnEmpty doThis = OnEmpty.Block) {
     if (!this.windows.length)
       return false;
 
     xlib.XEvent e;
+    if (doThis == OnEmpty.Return) {
+      if (!xlib.XPending(this.conf.dpy))
+        return true;
+    }
     xlib.XNextEvent(this.conf.dpy, &e);
 
     switch (e.type) {
@@ -281,13 +330,15 @@ struct MessageLoop {
       break;
 
     case xlib.ButtonPress:
+      this.sendEvent(e.xbutton.window, Event(buttonEvent(e.xbutton, true)));
+      break;
+
     case xlib.ButtonRelease:
-      this.sendEvent(e.xbutton.window, Event(mouseEvent(e.xbutton)));
+      this.sendEvent(e.xbutton.window, Event(buttonEvent(e.xbutton, false)));
       break;
 
     case xlib.MotionNotify:
-      this.sendEvent(e.xbutton.window, Event(mouseEvent(e.xbutton)));
-      this.sendEvent(e.xmotion.window, Event(mouseEvent(e.xbutton)));
+      this.sendEvent(e.xmotion.window, Event(mouseEvent(e.xmotion)));
       break;
 
     case xlib.MapNotify:
@@ -304,7 +355,14 @@ struct MessageLoop {
     return true;
   }
 
-  static MouseEvent mouseEvent(XEvent)(XEvent xe) {
+  static ButtonEvent buttonEvent(xlib.XButtonEvent xe, bool isdown) {
+    auto pos = IPoint(xe.x, xe.y);
+    auto btn = buttonDetail(xe.button);
+    auto mod = modState(xe.state);
+    return ButtonEvent(pos, isdown, btn, mod);
+  }
+
+  static MouseEvent mouseEvent(xlib.XMotionEvent xe) {
     auto pos = IPoint(xe.x, xe.y);
     auto btn = buttonState(xe.state);
     auto mod = modState(xe.state);

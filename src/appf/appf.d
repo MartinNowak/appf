@@ -1,7 +1,8 @@
 module appf.appf;
 
-public import appf.window;
+import appf.window;
 import std.exception, std.stdio;
+import guip.rect;
 
 /**
  * Application main class
@@ -18,11 +19,13 @@ class AppF {
 
   /**
    * Dispatches a single message to any created windows.
+   * Parameters:
+   *     doThis = the behaviour executed when the event queue is empty
    * Returns:
    *     false if the last window was closed
    */
-  bool dispatch() {
-    return msgLoop.dispatchMessage();
+  bool dispatch(OnEmpty doThis = OnEmpty.Block) {
+    return msgLoop.dispatchMessage(doThis);
   }
 
   /**

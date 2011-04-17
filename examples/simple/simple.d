@@ -1,8 +1,7 @@
-import appf.appf;
-
+import appf.appf, appf.window, guip._;
 import std.stdio;
 
-class MyHandler : EmptyHandler {
+class MyHandler : WindowHandler {
   override void onEvent(Event e, Window win) {
     visitEvent(e, this, win);
   }
