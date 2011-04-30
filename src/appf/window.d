@@ -247,8 +247,9 @@ enum EventMask =
     //    xlib.PointerMotionHintMask |
   xlib.KeyPressMask |
   xlib.KeyReleaseMask |
-  xlib.StructureNotifyMask |
-  xlib.VisibilityChangeMask;
+  xlib.StructureNotifyMask
+  //  xlib.VisibilityChangeMask
+ ;
 
 enum AtomT {
   WM_PROTOCOLS,
