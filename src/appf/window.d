@@ -355,9 +355,36 @@ struct MessageLoop {
       break;
 
     case xlib.ConfigureNotify:
+      xlib.XConfigureEvent conf = e.xconfigure;
+      xlib.XExposeEvent exp;
+
+    loop: while (xlib.XPending(this.conf.dpy)) {
+      xlib.XEvent peek;
+        xlib.XPeekEvent(this.conf.dpy, &peek);
+        switch (peek.type) {
+        case xlib.ConfigureNotify:
+          xlib.XNextEvent(this.conf.dpy, &peek);
+          assert(peek.type == xlib.ConfigureNotify);
+          conf = peek.xconfigure;
+          break;
+        case xlib.Expose:
+          xlib.XNextEvent(this.conf.dpy, &peek);
+          assert(peek.type == xlib.Expose);
+          exp = peek.xexpose;
+          break;
+        default:
+          break loop;
+        }
+      }
+
       auto area = IRect().setXYWH(
-        e.xconfigure.x, e.xconfigure.y, e.xconfigure.width, e.xconfigure.height);
-      this.sendEvent(e.xconfigure.window, Event(ResizeEvent(area)));
+        conf.x, conf.y, conf.width, conf.height);
+      this.sendEvent(conf.window, Event(ResizeEvent(area)));
+      if (exp.type == xlib.Expose) {
+        area = IRect().setXYWH(
+            exp.x, exp.y, exp.width, exp.height);
+        this.sendEvent(exp.window, Event(RedrawEvent(area)));
+      }
 
     default:
     }
