@@ -16,6 +16,8 @@ version (xlib) {
     btn.left = button == xlib.Button1;
     btn.middle = button == xlib.Button2;
     btn.right = button == xlib.Button3;
+    btn.wheelup = button == xlib.Button4;
+    btn.wheeldown = button == xlib.Button5;
     return btn;
   }
 
@@ -27,6 +29,7 @@ version (xlib) {
     return btn;
   }
 
+  // TODO: needs keycode->char translation
   Key keyDetail(uint keycode) {
     return Key(keycode);
   }
