@@ -385,6 +385,7 @@ struct MessageLoop {
             exp.x, exp.y, exp.width, exp.height);
         this.sendEvent(exp.window, Event(RedrawEvent(area)));
       }
+      break;
 
     default:
     }
