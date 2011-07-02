@@ -293,7 +293,7 @@ struct MessageLoop {
     if (win is null)
       return false;
     auto p = (win.platformHandle in this.windows);
-    return p is null ? false : enforce(p == win);
+    return p is null ? false : enforce(*p == win);
   }
 
   bool dispatchMessage(OnEmpty doThis = OnEmpty.Block) {
