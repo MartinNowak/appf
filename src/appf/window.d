@@ -60,7 +60,7 @@ class Window {
    * Returns:
    *     the newly created window
    */
-  Window makeSubWindow(IRect rect=IRect(400, 300)) {
+  Window mkSubWindow(IRect rect=IRect(400, 300)) {
     enforce(!rect.empty);
     auto sub = new Window(this.conf, null);
     sub.hwnd = createWindow(this, rect);

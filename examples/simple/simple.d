@@ -14,10 +14,10 @@ class MyHandler : WindowHandler {
 int main() {
   auto app = new AppF();
   auto handler = new MyHandler;
-  auto win1 = app.makeWindow(IRect(IPoint(40, 40), ISize(200, 200)), handler);
+  auto win1 = app.mkWindow(IRect(IPoint(40, 40), ISize(200, 200)), handler);
   win1.name("Window1");
   win1.show();
-  auto win2 = app.makeWindow().handler(handler).name("Window2")
+  auto win2 = app.mkWindow().handler(handler).name("Window2")
     .show().moveResize(IRect(IPoint(240, 40), ISize(200, 200)));
   return app.loop();
 }
