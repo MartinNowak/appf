@@ -64,6 +64,14 @@ class AppF {
     enforce(this.msgLoop.removeWindow(win));
   }
 
+  /**
+   * Destroys all windows and thus breaks the application loop
+   */
+  void quit() {
+    foreach(win; msgLoop.windows.values)
+      this.destroyWindow(win);
+  }
+
 private:
 
   MessageLoop msgLoop;
