@@ -60,7 +60,7 @@ class AppF {
    *     win = the window to destroy
    */
   void destroyWindow(ref Window win) {
-    scope(exit) { delete win; win = null; }
+    scope(exit) { win = null; }
     enforce(this.msgLoop.removeWindow(win));
   }
 
