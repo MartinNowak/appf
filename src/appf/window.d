@@ -255,6 +255,25 @@ enum AtomT {
   WM_DELETE_WINDOW,
     //WM_TAKE_FOCUS,
   _NET_WM_PING,
+
+  XdndEnter,
+  XdndPosition,
+  XdndStatus,
+  XdndLeave,
+  XdndDrop,
+  XdndFinished,
+  XdndTypeList,
+  XdndActionList,
+
+  XdndSelection,
+
+  XdndAware,
+  XdndProxy,
+
+  XdndActionCopy,
+  XdndActionLink,
+  XdndActionMove,
+  XdndActionPrivate,
 }
 
 struct MessageLoop {
@@ -266,7 +285,7 @@ struct MessageLoop {
     enforce(conf.dpy);
     this.conf = conf;
     foreach(i, name; __traits(allMembers, AtomT)) {
-      auto atom = XInternAtom(this.conf.dpy, name.ptr, Bool.False);
+      auto atom = XInternAtom(this.conf.dpy, toStringz(name), Bool.False);
       this.atoms[i] = atom;
     }
   }
@@ -308,6 +327,9 @@ struct MessageLoop {
 
     switch (e.type) {
     case EventType.ClientMessage:
+      if (e.xclient.format != 32 || e.xclient.message_type == 0)
+        break;
+
       if (e.xclient.message_type == this.atoms[AtomT.WM_PROTOCOLS]) {
         if (e.xclient.data.l[0] == this.atoms[AtomT.WM_DELETE_WINDOW]) {
           this.removeWindow(this.windows.get(e.xclient.window, null));
@@ -317,6 +339,11 @@ struct MessageLoop {
           e.xclient.window = XRootWindow(this.conf.dpy, this.conf.scr);
           XSendEvent(e.xclient.display, e.xclient.window, Bool.False,
             EventMask.SubstructureRedirectMask | EventMask.SubstructureNotifyMask, &e);
+        }
+      } else {
+        foreach(i, name; __traits(allMembers, AtomT)) {
+          if (e.xclient.message_type == this.atoms[i])
+            std.stdio.writeln(name);
         }
       }
       break;
@@ -423,7 +450,15 @@ struct MessageLoop {
     XSelectInput(this.conf.dpy, win.platformHandle, DefaultEvents);
     auto status = XSetWMProtocols(this.conf.dpy, win.platformHandle,
       this.atoms.ptr, cast(int)this.atoms.length);
+
     enforce(status == 1);
+
+    enum xdndVersion = 5;
+    enum XA_ATOM = cast(Atom)4;
+    auto atm = cast(Atom)xdndVersion;
+    auto ret = XChangeProperty(this.conf.dpy, win.platformHandle,
+                               this.atoms[AtomT.XdndAware], XA_ATOM, 32,
+                               PropertyMode.PropModeReplace, cast(ubyte*)&atm, 1);
   }
 }
 
