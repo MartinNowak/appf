@@ -168,6 +168,14 @@ class Window {
   }
 
   /**
+   * Sets the current input focus to this window
+   */
+  void grabInputFocus() {
+    XSetInputFocus(this.conf.dpy, this.hwnd,
+                   InputFocusRevertTo.RevertToNone, CurrentTime);
+  }
+
+  /**
    * Returns:
    *     the OS specific handle of this window
    */
