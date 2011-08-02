@@ -1,7 +1,7 @@
 module appf.window;
 
 import appf.event;
-import std.algorithm, std.conv, std.exception, std.string;
+import std.algorithm, std.conv, std.exception, std.string, std.traits;
 import guip._;
 
 /**
@@ -274,14 +274,49 @@ enum AtomT {
   XdndActionLink,
   XdndActionMove,
   XdndActionPrivate,
+
+  XA_STRING,
+  UTF8_STRING,
+}
+
+enum Mime : string {
+  TextPlain = "text/plain",
+  UriList = "text/uri-list",
 }
 
 enum XDND_VERSION = 4;
+enum AnyPropertyType = cast(Atom)0;
 enum XA_ATOM = cast(Atom)4;
+enum XA_STRING = cast(Atom)31;
+
+struct Property {
+  ubyte[] data;
+  int format;
+  ulong nitems;
+  Atom type;
+}
+
+Property readProperty(XDisplay* dpy, Window.PlatformHandle w, Atom property) {
+  Property res;
+  ubyte* ret;
+  ulong remain;
+  XGetWindowProperty(dpy, w, property, 0, -1, Bool.False, AnyPropertyType,
+                     &res.type, &res.format, &res.nitems, &remain, &ret);
+  size_t nbytes = (res.format / 8) * res.nitems;
+  static if (size_t.sizeof == 8) {
+    if (res.format == 32)
+      nbytes = (nbytes & 0x7) ? (nbytes / 8 + 1) * 8 : nbytes;
+  }
+  res.data.length = nbytes;
+  res.data[] = ret[0 .. nbytes];
+  XFree(ret);
+  return res;
+}
 
 struct MessageLoop {
   WindowConf conf;
   Atom[AtomT.max + 1] atoms;
+  Atom[Mime] mimeAtoms;
   Window[Window.PlatformHandle] windows;
   XDNDState xdndState;
 
@@ -291,6 +326,10 @@ struct MessageLoop {
     foreach(i, name; __traits(allMembers, AtomT)) {
       auto atom = XInternAtom(this.conf.dpy, toStringz(name), Bool.False);
       this.atoms[i] = atom;
+    }
+    foreach(e; EnumMembers!Mime) {
+      auto atom = XInternAtom(this.conf.dpy, toStringz(e), Bool.False);
+      this.mimeAtoms[e] = atom;
     }
   }
 
@@ -350,42 +389,101 @@ struct MessageLoop {
       // XDND handling
       // http://www.freedesktop.org/wiki/Specifications/XDND#ClientMessages
       } else if (e.xclient.message_type == this.atoms[AtomT.XdndEnter]) {
-        xdndState.lastClientMsg = e.xclient;
+        assert(xdndState == xdndState.init);
+
         auto srcVer = cast(ubyte)((e.xclient.data.l[1] >>> 24) & 0xf);
         if (srcVer > XDND_VERSION)
           break;
 
-        xdndState.sourceXID = cast(Window.PlatformHandle)(e.xclient.data.l[0]);
+        xdndState.sourceWin = cast(Window.PlatformHandle)(e.xclient.data.l[0]);
+        xdndState.targetWin = e.xclient.window;
         if (e.xclient.data.l[1] & 0x1) {
-          enum MAX_CNT = 100;
-          Atom actType;
-          int actFmt;
-          uint nitems, remBytes;
-          ubyte* retval;
-          if (XGetWindowProperty(this.conf.dpy, xdndState.sourceXID,
-                                 this.atoms[AtomT.XdndTypeList], 0, MAX_CNT,
-                                 Bool.False, XA_ATOM,
-                                 &actType, &actFmt,
-                                 &nitems, &remBytes, &retval))
+          auto types = readProperty(this.conf.dpy, xdndState.sourceWin,
+                                    this.atoms[AtomT.XdndTypeList]);
+          if (types.format != 32 || types.type != XA_ATOM)
             break;
-          if (actFmt != 32 || actType != XA_ATOM) {
-            XFree(retval);
-            break;
-          }
-          assert(remBytes == 0);
-          xdndState.types = (cast(Atom*)retval)[0 .. nitems].dup;
-          XFree(retval);
+          xdndState.types = cast(Atom[])types.data;
         } else {
           auto types = e.xclient.data.l[2 .. 5];
-          xdndState.types = cast(Atom[])types[0 .. $ - find!q{a==0}(types).length].dup;
+          auto zcnt = find!q{a==0}(types).length;
+          xdndState.types = cast(Atom[])types[0 .. $ - zcnt].dup;
         }
 
-        const cnt = to!int(xdndState.types.length);
-        char*[] names = new char*[cnt];
-        if (XGetAtomNames(this.conf.dpy, xdndState.types.ptr, cnt, names.ptr))
-          std.stdio.writeln(map!(to!string)(names));
-        foreach(n; names)
-          XFree(n);
+      } else if (e.xclient.message_type == this.atoms[AtomT.XdndPosition]) {
+        assert(xdndState.targetWin == e.xclient.window);
+
+        bool accept;
+        if (xdndState.files is null) {
+          auto tstamp = e.xclient.data.l[3];
+
+          if (!xdndState.pendingConversion &&
+              canFind(xdndState.types, this.mimeAtoms[Mime.UriList])) {
+
+            XConvertSelection(this.conf.dpy, this.atoms[AtomT.XdndSelection],
+                              this.mimeAtoms[Mime.UriList], this.atoms[AtomT.XdndSelection],
+                              xdndState.targetWin, tstamp);
+            xdndState.pendingConversion = true;
+          }
+        } else {
+          auto pos = e.xclient.data.l[2];
+          auto rootwin = XRootWindow(this.conf.dpy, this.conf.scr);
+
+          int rx = (pos & 0xFFFF0000) >> 16;
+          int ry = pos & 0xFFFF;
+
+            int tx, ty;
+          Window.PlatformHandle childRet;
+          XTranslateCoordinates(
+              this.conf.dpy, rootwin, xdndState.targetWin,
+              rx, ry, &tx, &ty,
+              &childRet);
+          xdndState.pos = IPoint(tx, ty);
+          this.sendEvent(xdndState.targetWin, Event(DragEvent(xdndState.pos, xdndState.files)));
+          accept = true;
+        }
+
+        XClientMessageEvent resp;
+        resp.type = EventType.ClientMessage;
+        resp.window = xdndState.sourceWin;
+        resp.format = 32;
+        resp.message_type = this.atoms[AtomT.XdndStatus];
+        resp.data.l[0] = e.xclient.window;
+        resp.data.l[1] = accept ? 0x1 : 0x0; // flags
+        resp.data.l[2] = e.xclient.data.l[2]; // coords (x << 16 | y)
+        resp.data.l[3] = (2 << 16) | 2; // (w << 16 | h)
+        resp.data.l[4] = accept ? this.atoms[AtomT.XdndActionCopy] : 0; // accepted action
+        XSendEvent(this.conf.dpy, xdndState.sourceWin,
+                   Bool.False, EventMask.NoEventMask, cast(XEvent*)&resp);
+
+      } else if (e.xclient.message_type == this.atoms[AtomT.XdndLeave]) {
+        assert(xdndState.targetWin == e.xclient.window);
+
+        XDeleteProperty(this.conf.dpy, xdndState.targetWin, this.atoms[AtomT.XdndSelection]);
+        xdndState = xdndState.init;
+
+      } else if (e.xclient.message_type == this.atoms[AtomT.XdndDrop]) {
+        assert(xdndState.targetWin == e.xclient.window);
+
+        XDeleteProperty(this.conf.dpy, xdndState.targetWin, this.atoms[AtomT.XdndSelection]);
+
+        bool accept = xdndState.files !is null;
+        if (accept)
+          this.sendEvent(xdndState.targetWin,
+                         Event(DropEvent(xdndState.pos, xdndState.files))
+          );
+
+        XClientMessageEvent resp;
+        resp.type = EventType.ClientMessage;
+        resp.window = xdndState.sourceWin;
+        resp.format = 32;
+        resp.message_type = this.atoms[AtomT.XdndFinished];
+        resp.data.l[0] = e.xclient.window;
+        resp.data.l[1] = accept ? 0x1 : 0x0; // flags
+        resp.data.l[2] = accept ? this.atoms[AtomT.XdndActionCopy] : 0; // accepted action
+        XSendEvent(this.conf.dpy, xdndState.sourceWin,
+                   Bool.False, EventMask.NoEventMask, cast(XEvent*)&resp);
+
+        xdndState = xdndState.init;
 
       // unhandled client message
       } else {
@@ -395,6 +493,17 @@ struct MessageLoop {
             break;
           }
         }
+      }
+      break;
+
+    case EventType.SelectionNotify:
+      if (e.xselection.selection == this.atoms[AtomT.XdndSelection]) {
+        auto prop = readProperty(this.conf.dpy, e.xselection.requestor,
+                                 this.atoms[AtomT.XdndSelection]);
+        if (prop.format != 8 || prop.type != this.mimeAtoms[Mime.UriList])
+          break;
+        xdndState.files = split(cast(string)prop.data);
+        xdndState.pendingConversion = false;
       }
       break;
 
@@ -464,6 +573,7 @@ struct MessageLoop {
       break;
 
     default:
+      std.stdio.writeln("unhandled event type ", e.type);
     }
     return true;
   }
@@ -511,9 +621,11 @@ struct MessageLoop {
 }
 
 struct XDNDState {
-  XClientMessageEvent lastClientMsg;
-  Window.PlatformHandle sourceXID;
+  Window.PlatformHandle sourceWin, targetWin;
+  IPoint pos;
   Atom[] types;
+  bool pendingConversion;
+  string[] files;
 }
 
 } // version xlib
