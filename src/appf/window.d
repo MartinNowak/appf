@@ -1,7 +1,7 @@
 module appf.window;
 
 import appf.event;
-import std.conv, std.exception, std.string;
+import std.algorithm, std.conv, std.exception, std.string;
 import guip._;
 
 /**
@@ -19,7 +19,7 @@ version (Posix) {
 }
 
 /**
- * Policy specifying empty event queue behviour
+ * Policy specifying empty event queue behaviour
  */
 enum OnEmpty { Block, Return }
 
@@ -276,10 +276,14 @@ enum AtomT {
   XdndActionPrivate,
 }
 
+enum XDND_VERSION = 4;
+enum XA_ATOM = cast(Atom)4;
+
 struct MessageLoop {
   WindowConf conf;
   Atom[AtomT.max + 1] atoms;
   Window[Window.PlatformHandle] windows;
+  XDNDState xdndState;
 
   this(WindowConf conf) {
     enforce(conf.dpy);
@@ -330,6 +334,8 @@ struct MessageLoop {
       if (e.xclient.format != 32 || e.xclient.message_type == 0)
         break;
 
+      // WM protocols
+      // http://standards.freedesktop.org/wm-spec/1.3/ar01s06.html
       if (e.xclient.message_type == this.atoms[AtomT.WM_PROTOCOLS]) {
         if (e.xclient.data.l[0] == this.atoms[AtomT.WM_DELETE_WINDOW]) {
           this.removeWindow(this.windows.get(e.xclient.window, null));
@@ -340,10 +346,54 @@ struct MessageLoop {
           XSendEvent(e.xclient.display, e.xclient.window, Bool.False,
             EventMask.SubstructureRedirectMask | EventMask.SubstructureNotifyMask, &e);
         }
+
+      // XDND handling
+      // http://www.freedesktop.org/wiki/Specifications/XDND#ClientMessages
+      } else if (e.xclient.message_type == this.atoms[AtomT.XdndEnter]) {
+        xdndState.lastClientMsg = e.xclient;
+        auto srcVer = cast(ubyte)((e.xclient.data.l[1] >>> 24) & 0xf);
+        if (srcVer > XDND_VERSION)
+          break;
+
+        xdndState.sourceXID = cast(Window.PlatformHandle)(e.xclient.data.l[0]);
+        if (e.xclient.data.l[1] & 0x1) {
+          enum MAX_CNT = 100;
+          Atom actType;
+          int actFmt;
+          uint nitems, remBytes;
+          ubyte* retval;
+          if (XGetWindowProperty(this.conf.dpy, xdndState.sourceXID,
+                                 this.atoms[AtomT.XdndTypeList], 0, MAX_CNT,
+                                 Bool.False, XA_ATOM,
+                                 &actType, &actFmt,
+                                 &nitems, &remBytes, &retval))
+            break;
+          if (actFmt != 32 || actType != XA_ATOM) {
+            XFree(retval);
+            break;
+          }
+          assert(remBytes == 0);
+          xdndState.types = (cast(Atom*)retval)[0 .. nitems].dup;
+          XFree(retval);
+        } else {
+          auto types = e.xclient.data.l[2 .. 5];
+          xdndState.types = cast(Atom[])types[0 .. $ - find!q{a==0}(types).length].dup;
+        }
+
+        const cnt = to!int(xdndState.types.length);
+        char*[] names = new char*[cnt];
+        if (XGetAtomNames(this.conf.dpy, xdndState.types.ptr, cnt, names.ptr))
+          std.stdio.writeln(map!(to!string)(names));
+        foreach(n; names)
+          XFree(n);
+
+      // unhandled client message
       } else {
         foreach(i, name; __traits(allMembers, AtomT)) {
-          if (e.xclient.message_type == this.atoms[i])
-            std.stdio.writeln(name);
+          if (e.xclient.message_type == this.atoms[i]) {
+            std.stdio.writeln("unhandled client message ", name);
+            break;
+          }
         }
       }
       break;
@@ -453,13 +503,17 @@ struct MessageLoop {
 
     enforce(status == 1);
 
-    enum xdndVersion = 5;
-    enum XA_ATOM = cast(Atom)4;
-    auto atm = cast(Atom)xdndVersion;
+    auto atm = cast(Atom)XDND_VERSION;
     auto ret = XChangeProperty(this.conf.dpy, win.platformHandle,
                                this.atoms[AtomT.XdndAware], XA_ATOM, 32,
                                PropertyMode.PropModeReplace, cast(ubyte*)&atm, 1);
   }
+}
+
+struct XDNDState {
+  XClientMessageEvent lastClientMsg;
+  Window.PlatformHandle sourceXID;
+  Atom[] types;
 }
 
 } // version xlib
