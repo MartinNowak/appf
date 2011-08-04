@@ -327,6 +327,7 @@ struct MessageLoop {
   Atom[Mime] mimeAtoms;
   Window[Window.PlatformHandle] windows;
   XDNDState xdndState;
+  ButtonDownState btnDownState;
 
   this(WindowConf conf) {
     enforce(conf.dpy);
@@ -524,11 +525,15 @@ struct MessageLoop {
       break;
 
     case EventType.ButtonPress:
-      this.sendEvent(e.xbutton.window, Event(buttonEvent(e.xbutton, true)));
+      auto be = buttonEvent(e.xbutton, true);
+      be.isdouble = storeButtonDownState(e.xbutton, be);
+      this.sendEvent(e.xbutton.window, Event(be));
       break;
 
     case EventType.ButtonRelease:
-      this.sendEvent(e.xbutton.window, Event(buttonEvent(e.xbutton, false)));
+      auto be = buttonEvent(e.xbutton, false);
+      be.isdouble = btnDownState.be.isdouble;
+      this.sendEvent(e.xbutton.window, Event(be));
       break;
 
     case EventType.KeyPress:
@@ -590,14 +595,18 @@ struct MessageLoop {
     auto pos = IPoint(xe.x, xe.y);
     auto btn = buttonDetail(xe.button);
     auto mod = modState(xe.state);
-    return ButtonEvent(pos, isdown, btn, mod);
+    auto be = ButtonEvent(pos, btn, mod);
+    be.isdown = isdown;
+    return be;
   }
 
   static KeyEvent keyEvent(XKeyEvent xe, bool isdown) {
     auto pos = IPoint(xe.x, xe.y);
     auto key = keyDetail(xe.keycode);
     auto mod = modState(xe.state);
-    return KeyEvent(pos, isdown, key, mod);
+    auto ke = KeyEvent(pos, key, mod);
+    ke.isdown = isdown;
+    return ke;
   }
 
   static MouseEvent mouseEvent(XMotionEvent xe) {
@@ -626,6 +635,29 @@ struct MessageLoop {
                                this.atoms[AtomT.XdndAware], XA_ATOM, 32,
                                PropertyMode.PropModeReplace, cast(ubyte*)&atm, 1);
   }
+
+  bool storeButtonDownState(XButtonEvent xe, ButtonEvent be) {
+    enum DBL_MS = 400;
+    enum DBL_DIST = 5.0;
+
+    if (xe.window == btnDownState.window
+        && xe.time - btnDownState.time < DBL_MS
+        && distance(be.pos, btnDownState.be.pos) < DBL_DIST
+        && be.button == btnDownState.be.button
+        && be.mod == btnDownState.be.mod) {
+        // reset state so next mouse down is not recognized as double
+        // but leave double mark for release
+        btnDownState = btnDownState.init;
+        btnDownState.be.isdouble = true;
+        return true;
+      } else {
+        btnDownState.window = xe.window;
+        btnDownState.time = xe.time;
+        be.isdouble = false;
+        btnDownState.be = be;
+        return false;
+    }
+  }
 }
 
 struct XDNDState {
@@ -634,6 +666,12 @@ struct XDNDState {
   Atom[] types;
   bool pendingConversion;
   string[] files;
+}
+
+struct ButtonDownState {
+  Window.PlatformHandle window;
+  Time time;
+  ButtonEvent be;
 }
 
 } // version xlib
