@@ -250,6 +250,7 @@ enum DefaultEvents =
   EventMask.ExposureMask |
   EventMask.ButtonPressMask |
   EventMask.ButtonReleaseMask |
+  EventMask.FocusChangeMask |
   EventMask.PointerMotionMask |
     //    EventMask.PointerMotionHintMask |
   EventMask.KeyPressMask |
@@ -366,6 +367,7 @@ struct MessageLoop {
     return p is null ? false : enforce(*p == win);
   }
 
+  // TODO: take Display* from events rather than from conf
   bool dispatchMessage(OnEmpty doThis = OnEmpty.Block) {
     if (!this.windows.length)
       return false;
@@ -534,6 +536,14 @@ struct MessageLoop {
       auto be = buttonEvent(e.xbutton, false);
       be.isdouble = btnDownState.be.isdouble;
       this.sendEvent(e.xbutton.window, Event(be));
+      break;
+
+    case EventType.FocusIn:
+      this.sendEvent(e.xfocus.window, Event(StateEvent(FocusEvent(true))));
+      break;
+
+    case EventType.FocusOut:
+      this.sendEvent(e.xfocus.window, Event(StateEvent(FocusEvent(false))));
       break;
 
     case EventType.KeyPress:
