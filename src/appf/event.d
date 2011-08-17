@@ -5,6 +5,7 @@ import guip.event, guip.point, guip.rect, guip.size;
 
 version (Posix) {
   version = xlib;
+  pragma(importpath, "x11=https://raw.github.com/dawgfoto/bindings/master/bindings/x11");
   import x11.xlib;
 } else {
   static assert(0);
