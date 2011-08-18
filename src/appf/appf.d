@@ -1,12 +1,8 @@
 module appf.appf;
 
-pragma(build, appf);
-
 import appf.window;
+import guip.rect;
 import std.exception, std.stdio;
-
-pragma(importpath, "guip=https://raw.github.com/dawgfoto/guip/master/src/guip/");
-import guip._;
 
 /**
  * Application main class

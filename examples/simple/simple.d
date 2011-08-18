@@ -1,13 +1,30 @@
-import appf.appf, appf.window, guip._;
+import appf._, guip._;
 import std.stdio;
 
 class MyHandler : WindowHandler {
-  override void onEvent(Event e, Window win) {
-    visitEvent(e, this, win);
+  override void onInputEvent(InputEvent e) {
+    final switch (e.type) {
+    case InputEvent.Type.None:
+      assert(0);
+    case InputEvent.Type.Button:
+      writeln("onInputEvent: ", e.ebutton.tupleof); break;
+    case InputEvent.Type.Mouse:
+      writeln("onInputEvent: ", e.emouse.tupleof); break;
+    case InputEvent.Type.Key:
+      writeln("onInputEvent: ", e.ekey.tupleof); break;
+    case InputEvent.Type.Drag:
+      writeln("onInputEvent: ", e.edrag.tupleof); break;
+    case InputEvent.Type.Drop:
+      writeln("onInputEvent: ", e.edrop.tupleof); break;
+    }
   }
 
-  void visit(T)(T e, Window win) {
-    writefln("%s for win:%s e:%s", typeid(T), win.name, e);
+  override void onResize(IRect area) {
+    writefln("onResize: %s", area);
+  }
+
+  override void onRefreshWindow(Window win, IRect area) {
+    writefln("onRefreshWindow: win: %s area: %s", win, area);
   }
 }
 

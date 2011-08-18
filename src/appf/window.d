@@ -8,12 +8,14 @@ import guip._;
  * Interface to manage window events
  */
 interface WindowHandler {
-  void onEvent(Event e, Window win);
+  void onInputEvent(InputEvent e);
+  void onResize(IRect area);
+  void onRefreshWindow(Window win, IRect area);
 }
 
 version (Posix) {
   version = xlib;
-  pragma(importpath, "x11=https://raw.github.com/dawgfoto/bindings/master/x11/");
+  pragma(importpath, "x11=https://raw.github.com/dawgfoto/bindings/master/x11");
   import x11.xlib;
 } else {
   static assert(0);
@@ -111,8 +113,8 @@ class Window {
    */
   ref Window show() {
     XMapWindow(this.conf.dpy, this.hwnd);
-    if (this.handler !is null)
-      this.handler.onEvent(Event(StateEvent(VisibilityEvent(true))), this);
+//    if (this.handler !is null)
+//      this.handler.onEvent(Event(StateEvent(VisibilityEvent(true))), this);
     return this;
   }
 
@@ -120,8 +122,8 @@ class Window {
    * Makes the window invisible
    */
   ref Window hide() {
-    if (this.handler !is null)
-      this.handler.onEvent(Event(StateEvent(VisibilityEvent(false))), this);
+//    if (this.handler !is null)
+//      this.handler.onEvent(Event(StateEvent(VisibilityEvent(false))), this);
     XUnmapWindow(this.conf.dpy, this.hwnd);
     return this;
   }
@@ -207,17 +209,6 @@ class Window {
                    size.width, size.height);
     xi.data = null; //! data is owned by bitmap buffer
     enforce(xi.f.destroy_image(xi));
-  }
-
-  /**
-   * Posts an event to this window's event loop
-   * Parameters:
-   *     e = the event to post
-   */
-  void sendEvent(Event e) {
-    auto xe = toPlatformEvent(e, this.conf.dpy, this.hwnd);
-    XSendEvent(this.conf.dpy, this.hwnd, Bool.True,
-      xemask(xe.type), &xe);
   }
 
 private:
@@ -450,7 +441,9 @@ struct MessageLoop {
               rx, ry, &tx, &ty,
               &childRet);
           xdndState.pos = IPoint(tx, ty);
-          this.sendEvent(xdndState.targetWin, Event(DragEvent(xdndState.pos, xdndState.files)));
+          InputEvent ie;
+          ie.edrag = DragEvent(xdndState.pos, xdndState.files);
+          this.sendInputEvent(xdndState.targetWin, ie);
           accept = true;
         }
 
@@ -479,10 +472,10 @@ struct MessageLoop {
         XDeleteProperty(this.conf.dpy, xdndState.targetWin, this.atoms[AtomT.XdndSelection]);
 
         bool accept = xdndState.files !is null;
-        if (accept)
-          this.sendEvent(xdndState.targetWin,
-                         Event(DropEvent(xdndState.pos, xdndState.files))
-          );
+        if (accept) {
+          InputEvent ie; ie.edrop = DropEvent(xdndState.pos, xdndState.files);
+          this.sendInputEvent(xdndState.targetWin, ie);
+        }
 
         XClientMessageEvent resp;
         resp.type = EventType.ClientMessage;
@@ -523,40 +516,69 @@ struct MessageLoop {
       if (e.xexpose.count < 1) {
         auto area = IRect().setXYWH(
           e.xexpose.x, e.xexpose.y, e.xexpose.width, e.xexpose.height);
-        this.sendEvent(e.xexpose.window, Event(RedrawEvent(area)));
+        auto win = e.xexpose.window in this.windows;
+        if (win !is null && win.handler !is null)
+          win.handler.onRefreshWindow(*win, area);
       }
       break;
 
     case EventType.ButtonPress:
-      auto be = buttonEvent(e.xbutton, true);
-      be.isdouble = storeButtonDownState(e.xbutton, be);
-      this.sendEvent(e.xbutton.window, Event(be));
+      InputEvent ie; ie.ebutton = ButtonEvent(
+          IPoint(e.xbutton.x, e.xbutton.y),
+          buttonDetail(e.xbutton.button),
+          modState(e.xbutton.state)
+      );
+      ie.ebutton.isdown = true;
+      ie.ebutton.isdouble = storeButtonDownState(e.xbutton, ie.ebutton);
+      this.sendInputEvent(e.xbutton.window, ie);
       break;
 
     case EventType.ButtonRelease:
-      auto be = buttonEvent(e.xbutton, false);
-      be.isdouble = btnDownState.be.isdouble;
-      this.sendEvent(e.xbutton.window, Event(be));
+      InputEvent ie; ie.ebutton = ButtonEvent(
+          IPoint(e.xbutton.x, e.xbutton.y),
+          buttonDetail(e.xbutton.button),
+          modState(e.xbutton.state)
+      );
+      ie.ebutton.isdown = false;
+      ie.ebutton.isdouble = btnDownState.be.isdouble;
+      this.sendInputEvent(e.xbutton.window, ie);
       break;
 
     case EventType.FocusIn:
-      this.sendEvent(e.xfocus.window, Event(StateEvent(FocusEvent(true))));
+      //      this.sendEvent(e.xfocus.window, Event(StateEvent(FocusEvent(true))));
       break;
 
     case EventType.FocusOut:
-      this.sendEvent(e.xfocus.window, Event(StateEvent(FocusEvent(false))));
+      //      this.sendEvent(e.xfocus.window, Event(StateEvent(FocusEvent(false))));
       break;
 
     case EventType.KeyPress:
-      this.sendEvent(e.xkey.window, Event(keyEvent(e.xkey, true)));
+      InputEvent ie; ie.ekey = KeyEvent(
+          IPoint(e.xkey.x, e.xkey.y),
+          keyDetail(e.xkey.keycode),
+          modState(e.xkey.state),
+          true,
+      );
+      this.sendInputEvent(e.xkey.window, ie);
       break;
 
     case EventType.KeyRelease:
-      this.sendEvent(e.xkey.window, Event(keyEvent(e.xkey, false)));
+      InputEvent ie; ie.ekey = KeyEvent(
+          IPoint(e.xkey.x, e.xkey.y),
+          keyDetail(e.xkey.keycode),
+          modState(e.xkey.state),
+          false,
+      );
+      this.sendInputEvent(e.xkey.window, ie);
       break;
 
     case EventType.MotionNotify:
-      this.sendEvent(e.xmotion.window, Event(mouseEvent(e.xmotion)));
+      InputEvent ie; ie.emouse = MouseEvent(
+          IPoint(e.xmotion.x, e.xmotion.y),
+          buttonState(e.xmotion.state),
+          modState(e.xmotion.state)
+      );
+      this.sendInputEvent(e.xmotion.window, ie);
       break;
 
     case EventType.MapNotify:
@@ -588,11 +610,15 @@ struct MessageLoop {
 
       auto area = IRect().setXYWH(
         conf.x, conf.y, conf.width, conf.height);
-      this.sendEvent(conf.window, Event(ResizeEvent(area)));
+      auto win = conf.window in this.windows;
+      if (win !is null && win.handler !is null)
+        win.handler.onResize(area);
       if (exp.type == EventType.Expose) {
         area = IRect().setXYWH(
             exp.x, exp.y, exp.width, exp.height);
-        this.sendEvent(exp.window, Event(RedrawEvent(area)));
+        win = exp.window in this.windows;
+        if (win !is null && win.handler !is null)
+          win.handler.onRefreshWindow(*win, area);
       }
       break;
 
@@ -602,36 +628,11 @@ struct MessageLoop {
     return true;
   }
 
-  static ButtonEvent buttonEvent(XButtonEvent xe, bool isdown) {
-    auto pos = IPoint(xe.x, xe.y);
-    auto btn = buttonDetail(xe.button);
-    auto mod = modState(xe.state);
-    auto be = ButtonEvent(pos, btn, mod);
-    be.isdown = isdown;
-    return be;
-  }
-
-  static KeyEvent keyEvent(XKeyEvent xe, bool isdown) {
-    auto pos = IPoint(xe.x, xe.y);
-    auto key = keyDetail(xe.keycode);
-    auto mod = modState(xe.state);
-    auto ke = KeyEvent(pos, key, mod);
-    ke.isdown = isdown;
-    return ke;
-  }
-
-  static MouseEvent mouseEvent(XMotionEvent xe) {
-    auto pos = IPoint(xe.x, xe.y);
-    auto btn = buttonState(xe.state);
-    auto mod = modState(xe.state);
-    return MouseEvent(pos, btn, mod);
-  }
-
-  void sendEvent(Window.PlatformHandle hwnd, Event event)
+  void sendInputEvent(Window.PlatformHandle hwnd, InputEvent ie)
   {
     auto win = hwnd in this.windows;
     if (win !is null && win.handler !is null)
-      win.handler.onEvent(event, *win);
+      win.handler.onInputEvent(ie);
   }
 
   void initWindow(Window win) {

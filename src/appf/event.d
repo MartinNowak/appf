@@ -1,14 +1,136 @@
 module appf.event;
 
-import std.algorithm;
-import guip.event, guip.point, guip.rect, guip.size;
+import std.algorithm, std.bitmanip;
+import guip.point, guip.rect, guip.size;
 
 version (Posix) {
   version = xlib;
-  pragma(importpath, "x11=https://raw.github.com/dawgfoto/bindings/master/bindings/x11");
+  pragma(importpath, "x11=https://raw.github.com/dawgfoto/bindings/master/x11");
   import x11.xlib;
 } else {
   static assert(0);
+}
+
+
+union InputEvent {
+  enum Type { None, Button, Mouse, Key, Drag, Drop }
+  struct { Type type; IPoint pos; }
+  ButtonEvent ebutton;
+  MouseEvent emouse;
+  KeyEvent ekey;
+  DragEvent edrag;
+  DropEvent edrop;
+}
+
+struct ButtonEvent {
+  this(IPoint pos, Button button, Mod mod) {
+    this.pos = pos; this.button = button; this.mod = mod;
+  }
+  @property bool isPress() const {
+    return this.isdown && !this.isdouble;
+  }
+  @property bool isRelease() const {
+    return !this.isdown && !this.isdouble;
+  }
+  @property bool isDoublePress() const {
+    return this.isdown && this.isdouble;
+  }
+  @property bool isDoubleRelease() const {
+    return !this.isdown && this.isdouble;
+  }
+  InputEvent.Type type = InputEvent.Type.Button;
+  IPoint pos;
+  Button button;
+  Mod mod;
+  mixin(bitfields!(
+            bool, "isdown", 1,
+            bool, "isdouble", 1,
+            bool, "isping", 1, // used for debug tools
+            uint, "", 5));
+}
+
+struct MouseEvent {
+  this(IPoint pos, Button button, Mod mod) {
+    this.pos = pos; this.button = button; this.mod = mod;
+  }
+  InputEvent.Type type = InputEvent.Type.Mouse;
+  IPoint pos;
+  Button button;
+  Mod mod;
+}
+
+struct KeyEvent {
+  this(IPoint pos, Key key, Mod mod, bool isdown) {
+    this.pos = pos; this.key = key; this.mod = mod; this.isdown = isdown;
+  }
+  @property bool isPress() const {
+    return this.isdown;
+  }
+  @property bool isRelease() const {
+    return !this.isdown;
+  }
+  InputEvent.Type type = InputEvent.Type.Key;
+  IPoint pos;
+  Key key;
+  Mod mod;
+  bool isdown;
+}
+
+struct DragEvent {
+  this(IPoint pos, string[] files) { this.pos = pos; this.files = files; }
+  InputEvent.Type type = InputEvent.Type.Drag;
+  IPoint pos;
+  string[] files;
+}
+
+struct DropEvent {
+  this(IPoint pos, string[] files) { this.pos = pos; this.files = files; }
+  InputEvent.Type type = InputEvent.Type.Drop;
+  IPoint pos;
+  string[] files;
+}
+
+/**
+   a bitfield representing pressed buttons
+ */
+struct Button {
+  @property bool any() const {
+    return this.left || this.middle || this.right || this.wheelup || this.wheeldown;
+  }
+
+  mixin(bitfields!(
+          bool, "left", 1,
+          bool, "middle", 1,
+          bool, "right", 1,
+          bool, "wheelup", 1,
+          bool, "wheeldown", 1,
+          uint, "", 3));
+}
+
+/**
+   a bitfield representing pressed modifiers
+ */
+struct Mod {
+  @property bool any() const {
+    return this.shift || this.ctrl || this.alt;
+  }
+
+  mixin(bitfields!(
+          bool, "shift", 1,
+          bool, "ctrl", 1,
+          bool, "alt", 1,
+          bool, "numlock", 1,
+          uint, "", 4));
+}
+
+/**
+   translates a key to it's corresponding character
+ */
+struct Key {
+  uint num;
+  @property dchar character() const {
+    return cast(dchar)this.num;
+  }
 }
 
 version (xlib) {
@@ -45,42 +167,5 @@ version (xlib) {
     mod.alt = (state & KeyOrButtonMask.Mod1Mask) != 0;
     mod.numlock = (state & KeyOrButtonMask.Mod2Mask) != 0;
     return mod;
-  }
-
-  struct ToXEvent {
-    XDisplay* dpy;
-    Window hwnd;
-
-    this(XDisplay* dpy, Window hwnd) {
-      this.dpy = dpy;
-      this.hwnd = hwnd;
-    }
-
-    XEvent visit(RedrawEvent e) {
-      XEvent xe;
-      xe.type = EventType.Expose;
-      xe.xexpose.type = EventType.Expose;
-      xe.xexpose.display = dpy;
-      xe.xexpose.window = hwnd;
-      xe.xexpose.x = e.area.left;
-      xe.xexpose.y = e.area.top;
-      xe.xexpose.width = e.area.width;
-      xe.xexpose.height = e.area.height;
-      return xe;
-    }
-  }
-
-  XEvent toPlatformEvent(Event e, XDisplay* dpy, Window hwnd) {
-    auto conv = ToXEvent(dpy, hwnd);
-    return visitEvent(e, conv);
-  }
-
-  EventMask xemask(uint type) {
-    switch (type) {
-    case EventType.Expose:
-      return EventMask.ExposureMask;
-    default:
-      assert(0);
-    }
   }
 }
