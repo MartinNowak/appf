@@ -290,15 +290,15 @@ enum AnyPropertyType = cast(Atom)0;
 enum XA_ATOM = cast(Atom)4;
 enum XA_STRING = cast(Atom)31;
 
-struct Property {
+struct XWindowProperty {
   ubyte[] data;
   int format;
   ulong nitems;
   Atom type;
 }
 
-Property readProperty(XDisplay* dpy, Window.PlatformHandle w, Atom property) {
-  Property res;
+XWindowProperty readProperty(XDisplay* dpy, Window.PlatformHandle w, Atom property) {
+  XWindowProperty res;
   ubyte* ret;
   ulong remain;
   XGetWindowProperty(dpy, w, property, 0, -1, Bool.False, AnyPropertyType,
