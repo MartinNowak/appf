@@ -15,7 +15,7 @@ interface WindowHandler {
 
 version (Posix) {
   version = xlib;
-  import x11.xlib;
+  import deimos.X11.Xlib;
 } else {
   static assert(0);
 }
@@ -30,7 +30,7 @@ version (xlib) {
  * Window class provides an OS independent abstraction of a window.
  */
 class Window {
-  alias x11.xlib.Window PlatformHandle;
+  alias deimos.X11.Xlib.Window PlatformHandle;
   WindowHandler _handler;
   WindowConf conf;
   PlatformHandle hwnd;
@@ -200,7 +200,7 @@ class Window {
     auto visual = XDefaultVisual(dpy, scr);
     auto depth = XDefaultDepth(dpy, scr);
     auto xi = XCreateImage(dpy, visual, 24, ImageFormat.ZPixmap,
-                                0, (cast(Bitmap)bitmap).getBuffer!byte().ptr,
+                                0, (cast(Bitmap)bitmap).getBuffer!char().ptr,
                                 bitmap.width, bitmap.height, 8, 0);
     assert(srcPos.x + size.width <= xi.width, to!string(srcPos) ~ "sz:" ~ to!string(size));
     assert(srcPos.y + size.height <= xi.height);

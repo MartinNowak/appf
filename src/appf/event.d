@@ -5,7 +5,7 @@ import guip.point, guip.rect, guip.size;
 
 version (Posix) {
   version = xlib;
-  import x11.xlib;
+  import deimos.X11.Xlib;
 } else {
   static assert(0);
 }
@@ -161,10 +161,10 @@ version (xlib) {
 
   Mod modState(uint state) {
     Mod mod;
-    mod.shift = (state & KeyOrButtonMask.ShiftMask) != 0;
-    mod.ctrl = (state & KeyOrButtonMask.ControlMask) != 0;
-    mod.alt = (state & KeyOrButtonMask.Mod1Mask) != 0;
-    mod.numlock = (state & KeyOrButtonMask.Mod2Mask) != 0;
+    mod.shift = (state & KeyMask.ShiftMask) != 0;
+    mod.ctrl = (state & KeyMask.ControlMask) != 0;
+    mod.alt = (state & KeyMask.Mod1Mask) != 0;
+    mod.numlock = (state & KeyMask.Mod2Mask) != 0;
     return mod;
   }
 }
